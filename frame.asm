@@ -9,52 +9,99 @@
 
 ;--------------------------------------------------------------------------------------------------------------
 ;                                      variables
-X_0 = 40d    
-Y_0 = 5d
+X_0 = 15d      ;min X coordinates in frame
+Y_0 = 5d       ;min Y coordinates in frame
 LEN_STR = 80d
-COLOR = 11011010b
+COLOR = 01101000b
 	   ;bBBBFFFF	b == blink;  B == back ground;  F == for ground       
 	   ; rgbIRGB	r/R == red;  g/G == green;  b/B == blue;  I == increase
 
-SYMBOL = 'A'
+SYMBOL = ' '
+
+;sizes of frame
+X_SIZE = 10d 
+Y_SIZE = 3d
+
 ;--------------------------------------------------------------------------------------------------------------
 
 .code         ;begin program
 
 org 100h      ;START == 256:   jmp START == jmp 256 != jmp 0 (because address [0;255] in program segment in DOS for PSP)
 START:
-	call Put_Sym       ;call func
+	call Print_Frame       ;call func
 
 	mov ax, 4c00h      ;end of program
 	int 21h            ;call system
 ;--------------------------------------------------------------------------------------------------------------
 
 
+
 ;--------------------------------------------------------------------------------------------------------------
-;											 Put_Sym
-;Draws one char 'SYMBOL' with 'COLOR' to video memory in (x = X_0, y = Y_0)
+;											 Print_Frame
+;Draws frame from (X_0, Y_0) to sizes: X_SIZE, Y_SIZE
 ;Entry: None
 ;Exit:  None
-;Destr: bx, es
+;Destr: bx, es, dx, ax
 ;--------------------------------------------------------------------------------------------------------------
 
-Put_Sym proc           ;mark for func
+Print_Frame proc          
+	mov dx, Y_0          ;dx - index of line
+
 	mov bx, 0b800h     ;video segment
 	mov es, bx         ;register es for segment address of video memory  (es != const    es == reg)
 
-	mov bx, Y_0 * 80 * 2 + X_0 * 2         ;offset in video segment  (2 <-- 2 bytes)
+	PRINT_NEW_LINE:
+		
+		mov ax, 80d * 2d           ;bx = 2 * 80 * dx + 2 * X_0
+		push dx
+		mul dx
+		pop dx
+		add ax, 2 * X_0 
+
+		mov bx, ax          ;offset in video segment  (2 <-- 2 bytes)
+
+		call Print_Line 
+		add dx, 1d
+
+		cmp dx, Y_0 + Y_SIZE
+		jnz PRINT_NEW_LINE
+
+	ret     
+	endp   
+;--------------------------------------------------------------------------------------------------------------
+
+
+;--------------------------------------------------------------------------------------------------------------
+;											 Print_Line
+;Draws one line that has chars 'SYMBOL' with 'COLOR' to video memory from (X_0, Y_0) to len = X_SIZE
+;Entry: None
+;Exit:  None
+;Destr: cx, bx 
+;--------------------------------------------------------------------------------------------------------------
+
+Print_Line proc         
 
 	;in text mode in video memory: sizeof (symbol) == 2
 	;byte ptr == mov 1 byte  in memory
 	;word ptr == mov 2 bytes in memory
 
-	mov byte ptr es:[bx],   SYMBOL  ;first byte for symbol's ASCII code
-	mov byte ptr es:[bx+1], COLOR   ;second byte for symbol's color  
+	mov cx, 0     ;cx - counter of symbols
 
-	ret     ;refund of control
-	endp    ;end of func
+	PRINT_SYMBOLS:
+		mov byte ptr es:[bx],   SYMBOL  ;first byte for symbol's ASCII code
+		mov byte ptr es:[bx+1], COLOR   ;second byte for symbol's color  
+
+		add cx, 1d
+		add bx, 2d
+
+		cmp cx, X_SIZE
+		jnz PRINT_SYMBOLS
+
+	ret     
+	endp    
 ;--------------------------------------------------------------------------------------------------------------
 
+Frame_Style_1 db '123456789$'
 
 end START              ;end of asm and address of program's beginning
 
