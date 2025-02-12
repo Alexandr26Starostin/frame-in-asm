@@ -1,7 +1,5 @@
 ;------------------------------------------------------------------------------------------------------------------
-;This program takes symbol from video memory and show it in text mode in point (X_0, Y_0)
-;
-;In this version program print 'SYMBOL' with 'COLOR'
+;This program
 ;------------------------------------------------------------------------------------------------------------------
 ;                                        program
 
@@ -9,25 +7,36 @@
 
 ;--------------------------------------------------------------------------------------------------------------
 ;                                      variables
-X_0 = 15d      ;min X coordinates in frame
-Y_0 = 5d       ;min Y coordinates in frame
-LEN_STR = 80d
-COLOR = 01101000b
-	   ;bBBBFFFF	b == blink;  B == back ground;  F == for ground       
-	   ; rgbIRGB	r/R == red;  g/G == green;  b/B == blue;  I == increase
-
-SYMBOL = ' '
+.data 
+LEN_STR dw 0080d
+COLOR db 01011011b
+	    ;bBBBFFFF	b == blink;  B == back ground;  F == for ground       
+	    ; rgbIRGB	r/R == red;  g/G == green;  b/B == blue;  I == increase
 
 ;sizes of frame
-X_SIZE = 10d 
-Y_SIZE = 3d
+X_SIZE dw 0010d 
+Y_SIZE dw 0006d
 
+Frame_Style_1 db '123456789$'
+
+;--------------------------------------------------------------------------------------------------------------
+;										main program
+;Entry: None
+;Exit:  None
+;Destr: si, ah
 ;--------------------------------------------------------------------------------------------------------------
 
 .code         ;begin program
-
 org 100h      ;START == 256:   jmp START == jmp 256 != jmp 0 (because address [0;255] in program segment in DOS for PSP)
 START:
+	mov si, offset Frame_Style_1
+	mov ah, COLOR
+	mov di, 0b800h     ;video segment
+	mov es, di         ;register es for segment address of video memory  (es != const    es == reg)
+	mov di, 0080d*(0005d)*0002d + 0002d*(0015d)
+	mov cx, X_SIZE
+	sub cx, 2d
+
 	call Print_Frame       ;call func
 
 	mov ax, 4c00h      ;end of program
@@ -38,33 +47,31 @@ START:
 
 ;--------------------------------------------------------------------------------------------------------------
 ;											 Print_Frame
-;Draws frame from (X_0, Y_0) to sizes: X_SIZE, Y_SIZE
+;Draws frame
 ;Entry: None
 ;Exit:  None
-;Destr: bx, es, dx, ax
+;Destr: 
 ;--------------------------------------------------------------------------------------------------------------
 
 Print_Frame proc          
-	mov dx, Y_0          ;dx - index of line
+	mov bx, Y_SIZE           ;bx - index of line  
 
-	mov bx, 0b800h     ;video segment
-	mov es, bx         ;register es for segment address of video memory  (es != const    es == reg)
+	call Print_Line 
+	dec bx    
 
 	PRINT_NEW_LINE:
-		
-		mov ax, 80d * 2d           ;bx = 2 * 80 * dx + 2 * X_0
-		push dx
-		mul dx
-		pop dx
-		add ax, 2 * X_0 
-
-		mov bx, ax          ;offset in video segment  (2 <-- 2 bytes)
-
+		push si
 		call Print_Line 
-		add dx, 1d
+		dec bx
+		pop si 
 
-		cmp dx, Y_0 + Y_SIZE
+		cmp bx, 1d
 		jnz PRINT_NEW_LINE
+
+	add si, 3
+
+	call Print_Line 
+	dec bx
 
 	ret     
 	endp   
@@ -73,35 +80,52 @@ Print_Frame proc
 
 ;--------------------------------------------------------------------------------------------------------------
 ;											 Print_Line
-;Draws one line that has chars 'SYMBOL' with 'COLOR' to video memory from (X_0, Y_0) to len = X_SIZE
-;Entry: None
+;Draws one line 
+
+;Entry: 	cx
+;			ah
+;			di
+;			si
+;
 ;Exit:  None
-;Destr: cx, bx 
+;
+;Destr: 	al 
+;			di 
+;			si
 ;--------------------------------------------------------------------------------------------------------------
 
-Print_Line proc         
+Print_Line proc     
 
-	;in text mode in video memory: sizeof (symbol) == 2
-	;byte ptr == mov 1 byte  in memory
-	;word ptr == mov 2 bytes in memory
+	push cx
 
-	mov cx, 0     ;cx - counter of symbols
+	mov al, ds:[si]
+	inc si
 
-	PRINT_SYMBOLS:
-		mov byte ptr es:[bx],   SYMBOL  ;first byte for symbol's ASCII code
-		mov byte ptr es:[bx+1], COLOR   ;second byte for symbol's color  
+	mov word ptr es:[di], ax
+	add di, 2
 
-		add cx, 1d
-		add bx, 2d
+	mov al, ds:[si]
+	inc si
 
-		cmp cx, X_SIZE
-		jnz PRINT_SYMBOLS
+	Next_Symbol:
+		mov word ptr es:[di], ax
+		add di, 2
+		loop Next_Symbol
+	
+	mov al, ds:[si]
+	inc si
+
+	mov word ptr es:[di], ax
+	add di, 2
+
+	pop cx
+
+	add di, 80d * 2d
+	sub di, X_SIZE
+	sub di, X_SIZE
 
 	ret     
 	endp    
 ;--------------------------------------------------------------------------------------------------------------
 
-Frame_Style_1 db '123456789$'
-
 end START              ;end of asm and address of program's beginning
-
