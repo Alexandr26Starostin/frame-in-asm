@@ -13,7 +13,7 @@ color db 00000000b
 	    ; rgbIRGB	r/R == red;  g/G == green;  b/B == blue;  I == increase
 
 x_size dw 0000d   ;horizontal sizes of frame
-y_size dw 0008d   ;vertical   sizes of frame
+y_size dw 0000d   ;vertical   sizes of frame
 
 frame_style db '123456789$'
 
@@ -30,11 +30,17 @@ start:
 	mov di, 0b800h     ;video segment
 	mov es, di         ;register es for segment address of video memory  (es != const    es == reg)
 
+	mov bx, 0081h      ;bx = address of the first symbol in command line
+
+	call skip_spaces
+
 	call atoi
 	mov x_size, ax     ;x_size = ax = horizontal size of frame
 
-	;call atoi
-	;mov y_size, ax     ;y_size = ax = vertical   size of frame
+	call skip_spaces
+
+	call atoi
+	mov y_size, ax     ;y_size = ax = vertical   size of frame
 
 	call count_left_high_point   
 
@@ -55,17 +61,44 @@ start:
 
 ;--------------------------------------------------------------------------------------------------------------
 ;											 atoi
-;translate str to 2 bytes int (dec number) (but it can not do this operation on this version)
+;translate str to 2 bytes int (dec number)
 
-;Entry: None (on this version)
+;Entry: bx = address of symbol in command line
 ;
 ;Exit:  ax = int number from str
+;       bx = address of symbol in command line; symbol != '0-9' (not a digit)
 ;
 ;Destr: ax = reading int from str
+;		bx = shifting address of symbol in command line before it finds '0-9'
+;       cx = read 1 digit and participates in calculations
+;		dx = for calculations
 ;--------------------------------------------------------------------------------------------------------------
 
-atoi proc          
-	mov ax, 0030d
+atoi proc      ;mov ax, 0030d   
+
+	mov ax, 0000d   ;ax = 0
+
+	check_next_symbol_in_atoi:
+
+	mov cl, ds:[bx]  ;cl = [bx]
+
+	cmp cl, '0'     ;cl - '0' < 0 => end_atoi
+	js end_atoi
+
+	cmp cl, '9'     ;'9' - cl < 0 => end_atoi
+	jns end_atoi
+
+	mov dx, 0010d
+	mul dx       ;ax = ax * 10
+
+	sub cl, '0'     ;cl = cl - '0'  =>  '<digital>' --> <digital>
+	add ax, cx      ;ax = (ax * 10) + cl - '0'
+
+	inc bx          ;bx++
+
+	jmp check_next_symbol_in_atoi
+
+	end_atoi:
 
 	ret     
 	endp   
@@ -192,9 +225,9 @@ print_frame proc
 ;
 ;Exit:  None
 ;
-;Destr: al 
-;		di 
-;		si
+;Destr: al = symbol
+;		di = shifting address of point in video memory (in video segment)
+;		si = shifting address on set of symbols
 ;--------------------------------------------------------------------------------------------------------------
 
 print_line proc     
@@ -230,5 +263,46 @@ print_line proc
 	ret     
 	endp    
 ;--------------------------------------------------------------------------------------------------------------
+
+
+
+
+;--------------------------------------------------------------------------------------------------------------
+;											 skip_spaces
+;skips spaces (' ') while doesn't find other symbol
+
+;Entry: bx = address of symbol in command line
+;
+;Exit:  bx = address of symbol in command line; symbol != ' '
+;
+;Destr: bx = address shifting if ds:[bx] == ' '
+;		ax = for compare lou half registers 
+;--------------------------------------------------------------------------------------------------------------
+
+skip_spaces proc     
+
+	push ax   ;save ax
+
+	jmp begin_check_symbol    
+
+	check_next_symbol:    ;while (memory[bx] == ' ') {bx++;}
+	
+		inc bx    
+
+		begin_check_symbol:
+		mov ax, ds:[bx]
+
+		cmp al, ' '
+		jz check_next_symbol
+
+	pop ax
+
+	ret     
+	endp   
+;--------------------------------------------------------------------------------------------------------------
+
+
+
+
 
 end start              ;end of asm and address of program's beginning
