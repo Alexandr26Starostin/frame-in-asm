@@ -15,7 +15,12 @@ color db 00000000b
 x_size dw 0000d   ;horizontal sizes of frame
 y_size dw 0000d   ;vertical   sizes of frame
 
-frame_style db '123456789+-+I I+-+$'
+
+;center point:   0080d*(0008d)*0002d + 0002d*(0038d)
+x_center dw 0038d
+y_center dw 0008d
+
+frame_style db '123456789+-+I I+-+', 03h, 03h, 03h, 03h, ' ', 03h, 03h, 03h, 03h
 
 ;--------------------------------------------------------------------------------------------------------------
 ;										main program
@@ -54,9 +59,14 @@ start:
 
 	mov ah, color     ;ah = color                
 	mov cx, x_size
-	sub cx, 0002d        ;cx = x_size - 2 = len of str with recurring symbol 
+	sub cx, 0002d     ;cx = x_size - 2 = len of str with recurring symbol 
 
 	call print_frame  
+
+	call count_point_for_beginning_of_text
+
+	call skip_spaces
+	call write_text_in_frame
 
 	mov ax, 4c00h      ;end of program with returned code = 0
 	int 21h            ;call system
@@ -347,4 +357,93 @@ evaluate_address_of_beginning_style proc
 	ret     
 	endp   
 ;--------------------------------------------------------------------------------------------------------------
+
+;--------------------------------------------------------------------------------------------------------------
+;										count_point_for_beginning_of_text
+;count address in video memory for the first symbol of text
+;
+;Entry: x_size   = horizontal size of frame
+;       x_center = x coordinate of center of frame
+;       y_center = y coordinate of center of frame
+;
+;Exit:  di = address in video memory for the first symbol of text
+;  
+;Destr: cx = calculations
+;       di = physical address of the first symbol of text
+;       ax = calculations (save)
+;--------------------------------------------------------------------------------------------------------------
+
+count_point_for_beginning_of_text proc   
+
+	push ax       ; save ax
+
+	mov ax, x_center
+	mov cx, x_size
+	shr cx, 2
+	sub ax, cx     ;ax = x_center - (x_size / 4)     - logical x_coordinate of point 
+
+	mov cx, 0002d 
+	mul cx          ;ax = ax * 2d    - physical x_coordinate of point 
+
+	mov di, ax
+	mov ax, y_center        ;ax = y_center    - logical y_coordinate of point
+	mov cx, 0002d * 0080d
+	mul cx                  ;ax = ax * 2d * 80d    - physical y_coordinate of point 
+
+	add di, ax              ;physical address of the first symbol of text
+
+	pop ax 
+
+	ret     
+	endp   
+;--------------------------------------------------------------------------------------------------------------
+
+
+;--------------------------------------------------------------------------------------------------------------
+;										write_text_in_frame
+;write text from command line in frame
+;
+;Entry: bx = address of symbol in command line
+;		ah = color
+;		di = address in video memory for the first symbol of text
+;
+;Exit:  None
+;
+;Destr: bx = address shifting for all symbols in text
+;       di = address shifting for put symbols with color in video memory
+;       al = symbols from text
+;		cx = has symbol for borders of text
+;--------------------------------------------------------------------------------------------------------------
+
+write_text_in_frame proc 
+
+	mov cl, '/'       ;'/' - symbol for borders of text
+
+	cmp ds:[bx], cl      
+	jnz end_write_text     ;check that the text begin from '/''   /<text>/
+	inc bx 
+	 
+	continue_write_text:
+
+	cmp ds:[bx], cl     ;if symbol == '/' => find the end of text
+	jz end_write_text   ;check that the symbol from text != '/'' 
+	                   
+	mov al, ds:[bx]      ;put in al symbol from text by address = ds:[bx]
+	inc bx               ;next symbol        
+
+	mov word ptr es:[di], ax   ;put symbol and his color (ax) in video memory by address = es[di]
+	add di, 2                  ;next position for symbol and color in video memory
+
+	jmp continue_write_text
+	
+	inc bx   ;skip the second '/'
+
+	end_write_text:
+
+	ret     
+	endp   
+;--------------------------------------------------------------------------------------------------------------
 end start              ;end of asm and address of program's beginning
+
+;list of colors: 
+;01011011 = blue symbols on violet background
